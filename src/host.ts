@@ -1512,7 +1512,12 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
         })
       },
     })
-    console.log('[dsh-paper-reader] routes registered under /paper-reader')
+    // 启动自检：一行同时给出「宿主加载的是哪一版」和「Zotero 同步是否被配置关闭」。
+    // 排查「面板上没有 ⇣Z」时先看这行：版本不对=加载了旧包；zotero sync: disabled=配置关了。
+    const zoteroFlag = config.zotero?.enabled === false ? 'disabled' : 'enabled'
+    console.log(
+      `[dsh-paper-reader] routes registered under /paper-reader (${pluginVersion}, zotero sync: ${zoteroFlag})`,
+    )
     return dispose
   })
 }
