@@ -27,6 +27,7 @@
 - 🈯 **划词翻译（公式保留）**（v1.6.1）：选中点「译」出纯译文气泡；选区含公式时用 MinerU 识别的 LaTeX 替换文本层乱码、要求模型原样保留
 - 🖥️ **中英对照 / 分屏**（v1.6.1）：并排对照页或左右分屏同步滚动，随时切换、按文献记忆
 - 🗂️ **文献管理**：专题/论文改名、删除进回收站可恢复
+- 🔗 **从 Zotero 同步**：文献库头部 `⇣Z` 一个按钮，把 Zotero「My Library」的 PDF 按合集成专题镜像进文献库；只读 Zotero，硬链接不额外占磁盘，重复点同步是幂等的——细则见 [docs/features.md](docs/features.md)
 - ➕ **可选增强**（默认关）：MinerU 解析——扫描件可读、公式可点引用可检索；嵌入端点——大白话命中术语段落
 
 各功能的前提与配置细节见 [docs/features.md](docs/features.md)。
@@ -64,10 +65,20 @@ dsh plugin --profile web add @ggboy123/dsh-paper-reader@latest   # 升级也是�
 ## 怎么用
 
 1. **进入**：侧栏底部点「📚 论文伴读」（再点还原）
-2. **入库**：＋ 新建专题 → ⬆ 上传 PDF
+2. **入库**：＋ 新建专题 → ⬆ 上传 PDF；或点 `⇣Z` 一键从 Zotero 拉取（见下）
 3. **读 + 问**：直接提问（回答自带页码），或选中文字弹框提问；点「第 N 页」跳回原文
 4. **中文版**：顶栏「中」一键生成（首次需在弹出表单里配一次 OpenAI 兼容端点，DeepSeek/GLM/Kimi 的 key 都行）
 5. **管理**：行悬停出 ✎ 改名 / 🗑 删除；对话头部 🕐 历史、＋ 新开
+
+### 从 Zotero 同步（可选）
+
+装了 Zotero 的话，文献库头部会多一个 `⇣Z` 按钮：点一次就把 Zotero「My Library」里的 PDF 按合集成专题拉进文献库，专题里能正常翻页、问答、生成中文版。它只是把文件镜像进来，不改你的 Zotero。
+
+- **前置**：Zotero 7+。二选一即可——① Zotero「设置 → 高级」勾选「允许此计算机上的其他应用程序与 Zotero 通信」（走本地 API，推荐）；② 不勾也行，插件会直接只读 `zotero.sqlite` 快照（Node 22.5+ 才有 `node:sqlite`）
+- **幂等**：重复点不会产生重复文献；同内容的文献（包括你手动上传过的）自动跳过；Zotero 里改了名会替换而不是多一份
+- **不删除**：Zotero 里删掉的文献默认只在结果里提示，不删库里文件；需要清理由配置项 `prune` 控制（移入 `data/.zotero-sync/trash/`）
+- **只同步 PDF**：Zotero 的笔记、批注、元数据不进文献库（那部分用 Zotero 或 `dsh-zotero` 插件查）；HTML 快照忽略
+- **换配置**：profile 的 `cordis.patch.yml` 里 `zotero` 段可改 `enabled` / `mode`（`link` 硬链接 / `copy` 复制）/ `nameMode`（`stem` / `citekey` / `key`）/ `multi` / `unfiled` / `dataDir` / `apiBase`；`enabled: false` 会连按钮一起隐藏
 
 ## 文献管理（安全说明）
 

@@ -27,6 +27,7 @@ A [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness) plug
 - 🈯 **Selection translation (formulas preserved)** (v1.6.1): select text, click "译" (Translate) for a translation-only bubble; when the selection overlaps a formula, the garbage text-layer glyphs are replaced with the LaTeX MinerU recognized and the model is asked to keep formulas verbatim
 - 🖥️ **Bilingual side-by-side / split view** (v1.6.1): a doubled-width对照 page or a two-pane split with synchronised scrolling — switch any time, remembered per paper
 - 🗂️ **Library management**: rename/delete topics and papers; deletion goes to a recoverable trash
+- 🔗 **Sync from Zotero**: one `⇣Z` button in the library header mirrors every PDF in your Zotero "My Library" into the library, Zotero collections becoming topics; Zotero is read-only, hard links use no extra disk space, and repeat syncs are idempotent — see [docs/features_EN.md](docs/features_EN.md)
 - ➕ **Optional add-ons** (off by default): MinerU parsing — scanned PDFs become readable, formulas become **Click to cite a formula** and searchable; an embeddings endpoint — plain-language semantic search
 
 Prerequisites and configuration details live in [docs/features_EN.md](docs/features_EN.md)（中文：[docs/features.md](docs/features.md)）.
@@ -64,10 +65,20 @@ dsh plugin --profile web add @ggboy123/dsh-paper-reader@latest   # same command 
 ## How to use
 
 1. **Enter**: click "📚 Paper Reading" at the bottom of the sidebar (click again to restore)
-2. **Add papers**: ＋ create a topic → ⬆ upload PDFs
+2. **Add papers**: ＋ create a topic → ⬆ upload PDFs; or press `⇣Z` to pull everything from Zotero (see below)
 3. **Read + ask**: just ask (answers cite pages), or select text for a pop-up question; click "page N" to jump back
 4. **Chinese version**: the "中" button generates a translation (first use asks for an OpenAI-compatible endpoint once — DeepSeek/GLM/Kimi keys all work)
 5. **Manage**: hover a row for ✎ rename / 🗑 delete; 🕐 in the chat header shows history, ＋ starts a new chat
+
+### Sync from Zotero (optional)
+
+If Zotero is installed, the library header gains a `⇣Z` button: one click mirrors the PDFs of Zotero's "My Library" into the library, Zotero collections becoming topics — those papers then read, cite pages, chat and translate like any uploaded one. It only copies files in; your Zotero is never modified.
+
+- **Prerequisite**: Zotero 7+. Either ① tick "Allow other applications on this computer to communicate with Zotero" in Zotero *Settings → Advanced* (local API, recommended), or ② leave it unticked — the plugin then reads a snapshot of `zotero.sqlite` directly (requires Node 22.5+ for `node:sqlite`)
+- **Idempotent**: pressing it twice never duplicates a paper; identical content (including PDFs you uploaded by hand) is skipped; renaming an item in Zotero replaces the file instead of adding a second copy
+- **No deletions**: papers removed from Zotero are only reported; nothing is deleted from the library unless the `prune` option is set (moves them to `data/.zotero-sync/trash/`)
+- **PDFs only**: notes, annotations and metadata stay in Zotero (use Zotero or the `dsh-zotero` plugin for those); HTML snapshots are ignored
+- **Configuration**: the `zotero` block in the profile's `cordis.patch.yml` accepts `enabled` / `mode` (`link` hard link / `copy`), `nameMode` (`stem` / `citekey` / `key`), `multi`, `unfiled`, `dataDir`, `apiBase`; `enabled: false` hides the button entirely
 
 ## Library management (safety notes)
 

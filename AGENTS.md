@@ -53,6 +53,8 @@ src/
   babeldoc-install.ts 纯函数：无 Python 环境时自动安装 babeldoc（uv → 托管 Python → venv）
   translate-selection.ts 纯函数：划词翻译（公式保留——行内公式与 MinerU 块文本对齐还原、提示词契约、逐公式保全校验、内存 LRU）
   rerank.ts     纯函数：search_paper 语义重排（TypeSafe/Jev，无凭据时退回关键词排序）
+  zotero.ts     纯函数：从 Zotero My Library 同步 PDF（本地 API 优先，退 sqlite 快照；
+                合集→专题、硬链接落盘、按附件 key 记账的幂等 manifest）
 cordis.patch.yml      bundle 声明插件本体 + 可选「论文伴读」agent preset（dsh-agent-preset；persona 完整提示词 + compaction）
 reader/index.html      阅读器页面（pdf.js，独立于 React 宿主，iframe 承载）
 lib/client.js          浏览器半边：文献库树(sidebar.workspaces 接管) + PDF 页签 + 主面板

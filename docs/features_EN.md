@@ -9,6 +9,7 @@ The README lists only the core capabilities; prerequisites, costs, known limitat
 - [Embedding semantic search](#embedding-semantic-search)
 - [Selection translation (formulas preserved)](#selection-translation-formulas-preserved)
 - [Bilingual split view (two modes)](#bilingual-split-view-two-modes)
+- [Syncing from Zotero](#syncing-from-zotero)
 - [Library management details](#library-management-details)
 
 ## Guided reading & stage checks
@@ -116,6 +117,31 @@ Two toolbar buttons; switch any time and **click again to return to the original
 - **Synchronised scrolling**: scrolling either pane moves the other to the **same page + same in-page ratio**; whichever pane you are scrolling leads, so the two never fight each other. In paged mode (`▣`) both panes show the same page. **If the Chinese PDF has a different page count, the panes are mapped proportionally** and a one-off notice appears in the status bar.
 - **Width**: the split view needs a panel at least **640px** wide; narrower, clicking "分屏" only explains and does **not** switch. Shrinking below 640px while split falls back to the original automatically.
 - **Interaction with existing features**: while split, the left pane is the ordinary original view — **formula hotspots stay clickable** (the right pane neither participates in hit-testing nor gets a hotspot layer), the formula panel keeps working, and the "中" toggle is disabled during split (to avoid conflicting semantics). Switching to the Chinese / dual view still disables hotspots, exactly as before (the bbox only holds for original pages).
+
+## Syncing from Zotero
+
+When a local Zotero is detected, the library header gains a `⇣Z` button; one click pulls every item in Zotero's "My Library" that has a local PDF into the library. **The button is the only entry point** — there is no background watcher and no scheduled job, so nothing touches the disk until you press it.
+
+- **Data source (auto-selected)**: the Zotero local HTTP API (`127.0.0.1:23119`, which requires ticking "Allow other applications on this computer to communicate with Zotero" in Zotero *Settings → Advanced*) is preferred. If the API is unreachable the plugin falls back to a **read-only database snapshot**: `zotero.sqlite` plus `-wal` / `-shm` are copied to a temp directory and queried there — no locking, no writes to Zotero (needs Node 22.5+ for `node:sqlite`).
+- **Where things land**: a collection becomes a topic (leaf name; when two branches share a leaf name it degrades to `parent - child`); the first PDF attachment of an item becomes `<topic>/<attachment name>.pdf`; items in no collection go to `未分类` (configurable); HTML snapshots and notes are ignored.
+- **Why hard links**: the library contract requires a **regular file** inside a top-level topic directory, and symlinks are skipped by `listPapers` (`Dirent.isFile()` is false for them). A hard link is a regular file that shares the same data as the Zotero original, so it costs no extra disk; across volumes or without permission it falls back to copying. **Trade-off**: never rewrite a mirrored PDF in place with another tool — the hard link would modify the Zotero original. For a translation, use the "中" button, which creates a separate `-zh.pdf`.
+- **Idempotent & deduplicated**: bookkeeping is per attachment key (`data/.zotero-sync/manifest.json`), so pressing the button again is a no-op; if the target topic already holds a PDF with the **same content fingerprint** (including files you uploaded by hand) it is skipped; renaming an item in Zotero replaces the file rather than adding one. When a PDF's content changes, `<paper>.txt` / `.pages.json` / `.transcript.json` / `.mineru.*` / `.embeddings.json` are deleted first so the transcript is rebuilt (the plugin treats a `.txt` larger than 1000 bytes as a valid cache and ignores mtime — otherwise stale text would be searched).
+- **Deletion semantics**: papers removed from Zotero are only reported by default and files are left alone; with `prune: true` they move to `data/.zotero-sync/trash/<timestamp>/` (recoverable, never hard-deleted).
+- **Configuration** (in the profile's `cordis.patch.yml`, under the `dsh-paper-reader` entry):
+
+  ```yaml
+  config:
+    zotero:
+      enabled: true          # false hides the button too
+      mode: link             # link (hard link, default) / copy
+      nameMode: stem         # stem (attachment name) / citekey / key (item key, most stable)
+      multi: false           # put a copy in every topic when an item is in several collections
+      unfiled: 未分类         # topic for items with no collection
+      dataDir: ''            # Zotero data dir; auto-detected (~/Zotero) when empty
+      apiBase: http://127.0.0.1:23119
+  ```
+
+- **Known limits**: PDFs only (notes, annotations and metadata stay in Zotero — use the `dsh-zotero` plugin for those); group libraries are not synced; attachments stored at a **relative** path outside `storage:` (linked files with `baseAttachmentPath`) are not resolved and are reported as "attachment file missing".
 
 ## Library management details
 

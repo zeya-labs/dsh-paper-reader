@@ -12,6 +12,7 @@ import { resolveRerankClient, resolveShortlistSize, rerankHits, type RerankConfi
 import { completeStep, formatStudy, readStudy, recordQuiz, setPlan } from './study.ts'
 import { readerOrigin } from './origin.ts'
 import { resolveMineruConfig, type MineruConfig } from './mineru-config.ts'
+import type { ZoteroConfig } from './zotero.ts'
 
 export interface PluginConfig {
   /** 文献库数据目录；默认 ~/.dsh-paper-reader/data */
@@ -29,6 +30,9 @@ export interface PluginConfig {
   /** 嵌入模型检索（OpenAI 兼容 /embeddings）。凭据优先级：设置面板 > 此 YAML > 环境变量 DSH_EMBED_API_KEY；
       三者缺任一项时嵌入检索整体关闭（默认关闭），search_paper 退回纯关键词排序 */
   embed?: EmbedConfig
+  /** Zotero 同步：面板「从 Zotero 同步」按钮把 My Library 的 PDF 镜像进文献库。
+      默认开；enabled: false 可整体关闭（不显示按钮、路由返回 disabled）。 */
+  zotero?: ZoteroConfig
 }
 
 const MINERU_SOURCES = ['auto', 'pdfjs', 'mineru-local', 'mineru-cloud'] as const

@@ -81,6 +81,7 @@ import {
   writeMineruConfig,
 } from './mineru-config.ts'
 import { noteOrigin } from './origin.ts'
+import { ZoteroSyncError, syncFromZotero, zoteroStatus } from './zotero.ts'
 
 type Req = import('node:http').IncomingMessage
 type Res = import('node:http').ServerResponse
@@ -186,6 +187,8 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
   const workspaceController = (ctx as unknown as { workspaceController: WorkspaceControllerLike }).workspaceController
   const workspaceRegistry = (ctx as unknown as { workspaceRegistry?: WorkspaceRegistryLike }).workspaceRegistry
   const dataDir = resolveDataDir(config.dataDir)
+  /** Zotero 同步进行中的任务（并发保护：同一时刻只允许一个写盘同步）。 */
+  let zoteroJob: Promise<unknown> | null = null
   // dist/host.js → 包根/reader/index.html
   const readerHtml = new URL('../reader/index.html', import.meta.url)
   const readerVendorDir = new URL('../reader/vendor/', import.meta.url)
@@ -480,6 +483,43 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
     if (sub === '/api/library' && req.method === 'GET') {
       const papers = listPapers(dataDir).map((p) => ({ ...p, pdfPath: join(dataDir, p.topic, p.name + '.pdf') }))
       json(res, 200, { dataDir, topics: listTopics(dataDir), papers })
+      return
+    }
+
+    /* ── Zotero 同步（面板「从 Zotero 同步」按钮的入口）─────────────────────
+       只读 Zotero：优先本地 HTTP API（127.0.0.1:23119，需用户在 Zotero 设置里放行），
+       否则把 zotero.sqlite 快照到临时目录直读（node:sqlite）。只写 <dataDir>/<专题>/ 与
+       <dataDir>/.zotero-sync/（manifest + 回收目录），不碰 Zotero 任何文件。
+       并发保护：同步进行中点第二次给 409，不让两个写盘任务交错。 */
+    if (sub === '/api/zotero/status' && req.method === 'GET') {
+      json(res, 200, await zoteroStatus({ ...(config.zotero ? { zotero: config.zotero } : {}) }))
+      return
+    }
+    if (sub === '/api/zotero/sync' && req.method === 'POST') {
+      const body = (await readBody(req)) as { dryRun?: boolean; prune?: boolean }
+      if (zoteroJob) {
+        json(res, 409, { error: '正在从 Zotero 同步，请稍候', code: 'sync-busy' })
+        return
+      }
+      try {
+        const job = syncFromZotero({
+          dataDir,
+          ...(config.zotero ? { zotero: config.zotero } : {}),
+          ...(body.dryRun === true ? { dryRun: true } : {}),
+          ...(body.prune === true ? { prune: true } : {}),
+        })
+        zoteroJob = job
+        json(res, 200, await job)
+      } catch (err) {
+        // 领域错误保留可读文案与状态码（503=连不上 Zotero，501=无 sqlite，409=已关闭）
+        if (err instanceof ZoteroSyncError) {
+          json(res, err.status, { error: err.message, code: err.code })
+          return
+        }
+        throw err
+      } finally {
+        zoteroJob = null
+      }
       return
     }
 
