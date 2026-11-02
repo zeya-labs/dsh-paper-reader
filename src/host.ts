@@ -3,7 +3,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createReadStream, existsSync, readFileSync, realpathSync } from 'node:fs'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { basename, join, resolve } from 'node:path'
 import type { PluginConfig } from './tools.ts'
@@ -493,6 +494,20 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
        并发保护：同步进行中点第二次给 409，不让两个写盘任务交错。 */
     if (sub === '/api/zotero/status' && req.method === 'GET') {
       json(res, 200, await zoteroStatus({ ...(config.zotero ? { zotero: config.zotero } : {}) }))
+      return
+    }
+    /* 诊断通道（config.debug 才启用）：渲染端把 DOM 自检 POST 过来，落到
+       $DSH_HOME/dpr-debug.jsonl。用途：前端「按钮能点但看不见」这类问题，
+       光看宿主日志判断不了 —— 需要元素的实际 rect / 计算样式。
+       只在排查期打开，默认关闭；不写库目录、不带凭据。 */
+    if (config.debug && sub === '/api/debug' && req.method === 'POST') {
+      const body = (await readBody(req)) as { tag?: string; payload?: unknown }
+      const home = process.env['DSH_HOME']?.trim() || join(homedir(), '.dsh')
+      const line = JSON.stringify({ at: new Date().toISOString(), tag: body.tag ?? '', payload: body.payload ?? null })
+      try {
+        await appendFile(join(home, 'dpr-debug.jsonl'), line + '\n', 'utf8')
+      } catch { /* 诊断失败不影响主流程 */ }
+      json(res, 200, { ok: true })
       return
     }
     if (sub === '/api/zotero/sync' && req.method === 'POST') {

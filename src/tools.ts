@@ -33,6 +33,9 @@ export interface PluginConfig {
   /** Zotero 同步：面板「从 Zotero 同步」按钮把 My Library 的 PDF 镜像进文献库。
       默认开；enabled: false 可整体关闭（不显示按钮、路由返回 disabled）。 */
   zotero?: ZoteroConfig
+  /** 诊断开关：开启后接受 POST /paper-reader/api/debug，把渲染端自检写入
+      $DSH_HOME/dpr-debug.jsonl。默认关；只在排查前端问题时临时打开。 */
+  debug?: boolean
 }
 
 const MINERU_SOURCES = ['auto', 'pdfjs', 'mineru-local', 'mineru-cloud'] as const
