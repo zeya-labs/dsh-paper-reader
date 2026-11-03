@@ -472,7 +472,10 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
         // 只有文本类才追加 charset：给 font/woff2 这类二进制资源加 `; charset=utf-8` 是错的
         // （实测 font/woff2 被浏览器按未知类型处理的风险；见 test/reader-vendor-http.test.mjs）
         const texty = type.startsWith('text/') || type === 'application/json'
-        res.writeHead(200, { 'content-type': texty ? type + '; charset=utf-8' : type, 'content-length': body.length, 'cache-control': 'no-cache' })
+        // 静态资源（pdf.js / KaTeX / 字体，合计 2.18MB）只在升级插件时才换：加长缓存，
+        // 省掉每次打开阅读器都重下 2MB。ETag 用内容长度做弱校验，升级后长度变即失效。
+        const assetTag = 'W/"' + body.length.toString(16) + '"'
+        res.writeHead(200, { 'content-type': texty ? type + '; charset=utf-8' : type, 'content-length': body.length, 'cache-control': 'private, max-age=86400', etag: assetTag })
         res.end(body)
       } catch {
         json(res, 404, { error: 'not found' })
@@ -1022,6 +1025,10 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
         name: ref.name,
         pdfPath: ref.pdfPath,
         pdfBytes: st.size,
+        // 阅读器用它当缓存键（`&t=`）：文件没变 → URL 不变 → 浏览器直接复用 47MB 的正文，
+        // 不再每次打开都重新下载整份 PDF。文件被替换（Zotero 同步/手动覆盖）时 mtime 变，
+        // URL 跟着变，缓存自然失效。
+        pdfMtimeMs: Math.floor(st.mtimeMs),
         hasTranscript: t !== null,
         chars: t?.text.length ?? 0,
         hasPageIndex: (t?.pages?.length ?? 0) > 0,
@@ -1035,17 +1042,61 @@ export function registerRoutes(ctx: Context, config: PluginConfig) {
       const pdfPath = pdfVariantPath(ref, url.searchParams.get('variant'))
       const st = await stat(pdfPath) // 变体不存在时 404/500 由外层兜底
       // download=1 → 附件下载（导出译文/原文）；文件名即磁盘名 <名>.pdf / -zh.pdf / -dual.pdf
-      const headers: Record<string, string | number> = {
+      //
+      // 缓存与分块读取（47MB 的论文 PDF 感知最明显）：
+      //   · ETag = 大小+mtime；阅读器的 URL 里已带同一组值当 `t`，所以文件没变时
+      //     重开=一次 304 协商，不再把整份 47MB 重新传给渲染进程；
+      //   · 支持 Range：pdf.js 可以按需拉取（首屏只取目录/前几页），而不是等整份到位。
+      //   · 仍然 `no-cache`：文件被替换（Zotero 同步 / 重新生成译文）时必须立刻失效。
+      const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`
+      const baseHeaders: Record<string, string | number> = {
         'content-type': 'application/pdf',
-        'content-length': st.size,
-        'cache-control': 'no-cache', // 切换文献/重新生成后必须拿到新的
+        'accept-ranges': 'bytes',
+        etag,
+        'cache-control': 'private, no-cache',
       }
-      if (url.searchParams.get('download') === '1') {
+      if (req.headers['if-none-match'] === etag && url.searchParams.get('download') !== '1') {
+        res.writeHead(304, baseHeaders)
+        res.end()
+        return
+      }
+      const download = url.searchParams.get('download') === '1'
+      const disposition: Record<string, string> = {}
+      if (download) {
         const name = basename(pdfPath)
-        headers['content-disposition'] =
+        disposition['content-disposition'] =
           `attachment; filename="paper.pdf"; filename*=UTF-8''${encodeURIComponent(name)}`
       }
-      res.writeHead(200, headers)
+      const rangeHeader = req.headers.range
+      if (rangeHeader && !download) {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(String(rangeHeader))
+        if (m) {
+          const size = st.size
+          let start = m[1] ? Number(m[1]) : Number.NaN
+          let end = m[2] ? Number(m[2]) : Number.NaN
+          if (Number.isNaN(start)) {
+            // 后缀范围 bytes=-N：要最后 N 字节
+            const suffix = Number.isNaN(end) ? 0 : end
+            start = Math.max(0, size - suffix)
+            end = size - 1
+          } else if (Number.isNaN(end) || end >= size) {
+            end = size - 1
+          }
+          if (start >= size || start > end) {
+            res.writeHead(416, { 'content-range': `bytes */${size}` })
+            res.end()
+            return
+          }
+          res.writeHead(206, {
+            ...baseHeaders,
+            'content-range': `bytes ${start}-${end}/${size}`,
+            'content-length': end - start + 1,
+          })
+          createReadStream(pdfPath, { start, end }).pipe(res)
+          return
+        }
+      }
+      res.writeHead(200, { ...baseHeaders, 'content-length': st.size, ...disposition })
       createReadStream(pdfPath).pipe(res)
       return
     }
